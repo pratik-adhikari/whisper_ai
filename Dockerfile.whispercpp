@@ -1,0 +1,76 @@
+# ========================================
+# Multi-stage build for whisper.cpp with CUDA
+# ========================================
+
+# ---- Build Stage: Compile whisper.cpp ----
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS build
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake build-essential pkg-config \
+    python3 python3-pip \
+    ffmpeg ca-certificates curl unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# CUDA driver stubs for linking during build
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+ && echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/cuda-stubs.conf \
+ && ldconfig
+
+# Clone and build whisper.cpp
+WORKDIR /opt
+RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+WORKDIR /opt/whisper.cpp
+
+# Build with CUDA support (SM 89 for RTX 4070, adjust for your GPU)
+# Common architectures: RTX 3000 = 86, RTX 4000 = 89, A100 = 80
+RUN cmake -B build \
+    -DGGML_CUDA=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CUDA_ARCHITECTURES=89 \
+ && cmake --build build -j$(nproc) --target whisper-cli
+
+# Collect runtime artifacts
+RUN mkdir -p /opt/whisper_runtime/bin /opt/whisper_runtime/lib /opt/whisper_runtime/models \
+ && cp -v build/bin/whisper-cli /opt/whisper_runtime/bin/ \
+ && find build -type f -name 'libwhisper.so*' -exec cp -av {} /opt/whisper_runtime/lib/ \; \
+ && find build -type f -name 'libggml*.so*' -exec cp -av {} /opt/whisper_runtime/lib/ \; \
+ && cp -av models /opt/whisper_runtime/
+
+
+# ---- Runtime Stage: Minimal runtime image ----
+FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04 AS runtime
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    python3 python3-pip \
+    ffmpeg \
+    ca-certificates \
+    curl \
+    unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install yt-dlp with default extractors
+RUN python3 -m pip install --no-cache-dir -U pip "yt-dlp[default]"
+
+# Install deno for yt-dlp JavaScript execution (handles some video sites)
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+
+# Copy whisper.cpp binaries and libraries
+COPY --from=build /opt/whisper_runtime/bin/whisper-cli /usr/local/bin/whisper-cli
+COPY --from=build /opt/whisper_runtime/lib/ /usr/local/lib/
+COPY --from=build /opt/whisper_runtime/models /opt/whisper_models_scripts
+
+# Configure dynamic linker
+RUN ldconfig
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+# Copy container script
+COPY image/transcribe_url.sh /usr/local/bin/transcribe_url.sh
+RUN chmod +x /usr/local/bin/transcribe_url.sh
+
+# Explicit bash entrypoint to avoid shell parsing errors
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/transcribe_url.sh"]
+

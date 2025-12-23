@@ -1,0 +1,49 @@
+# Exclude large/unnecessary files from Docker build context
+
+# Source code (we clone fresh in Dockerfile)
+whisper.cpp/
+
+# Models (mount at runtime)
+models/
+*.bin
+
+# Output directories
+out/
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Documentation (not needed in image)  
+*.md
+LICENSE
+
+# Test data
+data/
+
+# Old scripts
+whisper-asr-webservice/
+whisperX/
+transcribe.py
+batch_transcribe_whispercpp.py
+urls.txt
+
+# Temporary files
+*.log
+*.tmp

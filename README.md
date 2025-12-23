@@ -64,6 +64,16 @@ docker build -f Dockerfile.whispercpp -t whispercpp:cuda12 .
 # That's it! No pip install needed on host.
 ```
 
+## Examples
+
+See [examples/bhagavad_gita_chapter3](examples/bhagavad_gita_chapter3/) for real output from transcribing a Sanskrit chanting video with Devanagari transliteration. Includes:
+- Complete metadata (`meta.json`)
+- Roman transliteration excerpts
+- Devanagari (देवनागरी) transliteration excerpts
+- SRT subtitle format samples
+
+This demonstrates the tool's quality on religious/spiritual content in Sanskrit.
+
 ## Usage
 
 ### Basic Usage
